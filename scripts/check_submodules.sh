@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
 # check_submodules.sh
 #
-# Iterates over every submodule declared in .gitmodules and warns when
-# any of them is pinned to a commit that is behind the remote HEAD.
+# For every submodule declared in .gitmodules:
+#   - Warns if the pinned commit is behind the remote HEAD.
+#   - If the submodule path matches AUTO_UPDATE_SUBMODULE (default: "common"),
+#     automatically runs `git submodule update --remote <path>` and stages the
+#     updated pointer so the bump is included in the current commit.
+#   - All other stale submodules receive a warning only.
 #
-# Always exits 0 — this is a warning-only hook; it never blocks a commit.
+# Always exits 0 — this hook never blocks a commit.
 #
 # Optional env vars
 #   SUBMODULE_REMOTE_BRANCH   Remote ref to compare against (default: HEAD)
 #   SUBMODULE_SKIP            Space-separated list of submodule paths to skip
+#   AUTO_UPDATE_SUBMODULE     Submodule path to auto-update (default: common)
 
 set -euo pipefail
 
 REMOTE_BRANCH="${SUBMODULE_REMOTE_BRANCH:-HEAD}"
 SKIP_LIST="${SUBMODULE_SKIP:-}"
+AUTO_UPDATE="${AUTO_UPDATE_SUBMODULE:-common}"
 
 # ── Collect all submodule paths from .gitmodules ─────────────────────────────
 if [[ ! -f .gitmodules ]]; then
@@ -77,8 +83,22 @@ for path in "${submodule_paths[@]}"; do
     continue  # Unreachable remote — do not block or warn
   fi
 
-  # 4. Compare
-  if [[ "$pinned" != "$remote_sha" ]]; then
+  # 4. Compare — up to date, nothing to do
+  if [[ "$pinned" == "$remote_sha" ]]; then
+    continue
+  fi
+
+  # 5. Stale — auto-update if this is the designated submodule, otherwise warn
+  if [[ "$path" == "$AUTO_UPDATE" ]]; then
+    echo "pull-submodules: '$path' is behind remote — auto-updating and staging." >&2
+    if git submodule update --remote "$path" 2>/dev/null; then
+      git add "$path"
+      echo "pull-submodules: '$path' updated to $(git submodule status "$path" | awk '{print $1}' | tr -d '+-U') and staged." >&2
+    else
+      echo "pull-submodules: WARNING — auto-update of '$path' failed; please update manually." >&2
+      warned=1
+    fi
+  else
     echo "" >&2
     echo "WARNING: submodule '$path' is behind the remote." >&2
     echo "  Pinned : $pinned" >&2
@@ -90,7 +110,7 @@ for path in "${submodule_paths[@]}"; do
 
 done
 
-# Summary line if any submodule was stale
+# Summary line if any non-auto submodule was stale
 if [[ $warned -eq 1 ]]; then
   echo "pull-submodules: one or more submodules are out of date." \
        "Run 'git submodule update --remote' to update all." >&2
