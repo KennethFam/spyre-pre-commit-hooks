@@ -1,14 +1,14 @@
 -   id: pull-submodules
     name: pull-submodules
     description: "Checks the submodule directory provided and pulls from it."
-    entry: 
+    entry: scripts/check_submodules.sh
     language: script
-    types: [git]
+    always_run: true
     pass_filenames: false
 -   id: check-main
     name: check-main
     description: "Checks current branch to see if there's a merge conflict with main."
     entry: 
     language: script
-    types: [git]
+    always_run: true
     pass_filenames: false
