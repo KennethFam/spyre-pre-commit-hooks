@@ -8,7 +8,7 @@
 -   id: check-main
     name: check-main
     description: "Checks current branch to see if there's a merge conflict with main."
-    entry: 
+    entry: check-main.sh
     language: script
     types: [git]
     pass_filenames: false
