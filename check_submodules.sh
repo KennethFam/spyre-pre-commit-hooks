@@ -45,9 +45,11 @@ for path in "${submodule_paths[@]}"; do
     fi
   done
 
-  # 1. Pinned commit in the parent repo's index
-  pinned=$(git submodule status "$path" 2>/dev/null \
-           | awk '{print $1}' | tr -d '+-U') || true
+  # 1. Pinned commit from the staging index (what will actually be committed).
+  #    git ls-files --stage reads the index directly, avoiding the working-tree
+  #    confusion that `git submodule status` has with the +/-/U prefix.
+  pinned=$(git ls-files --stage -- "$path" 2>/dev/null \
+           | awk '{print $2}') || true
 
   if [[ -z "$pinned" ]]; then
     echo "pull-submodules: '$path' listed in .gitmodules but not initialised, skipping." >&2
