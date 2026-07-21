@@ -26,10 +26,10 @@ if [[ ! -f .gitmodules ]]; then
   exit 0  # No submodules in this repo — nothing to do
 fi
 
-mapfile -t submodule_paths < <(
-  git config --file .gitmodules --get-regexp '\.path$' \
-  | awk '{print $2}'
-)
+submodule_paths=()
+while IFS= read -r line; do
+  submodule_paths+=("$line")
+done < <(git config --file .gitmodules --get-regexp '\.path$' | awk '{print $2}')
 
 if [[ ${#submodule_paths[@]} -eq 0 ]]; then
   exit 0
