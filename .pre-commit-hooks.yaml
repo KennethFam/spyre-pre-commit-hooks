@@ -1,7 +1,7 @@
 -   id: pull-submodules
     name: pull-submodules
     description: "Checks the submodule directory provided and pulls from it."
-    entry:
+    entry: scripts/check_submodules.sh
     language: script
     always_run: true
     pass_filenames: false
