@@ -2,13 +2,11 @@
 # check_submodules.sh
 #
 # For every submodule declared in .gitmodules:
-#   - Warns if the pinned commit is behind the remote HEAD.
-#   - If the submodule path matches AUTO_UPDATE_SUBMODULE (default: "common"),
-#     automatically runs `git submodule update --remote <path>` and stages the
-#     updated pointer so the bump is included in the current commit.
-#   - All other stale submodules receive a warning only.
-#
-# Always exits 0 — this hook never blocks a commit.
+#   - If the submodule path matches AUTO_UPDATE_SUBMODULE (default: "common")
+#     and is stale: auto-updates it, stages the pointer, then exits 1 so
+#     pre-commit surfaces the change and asks the user to re-commit
+#     (same pattern as end-of-file-fixer).
+#   - All other stale submodules print a warning only (exit 0).
 #
 # Optional env vars
 #   SUBMODULE_REMOTE_BRANCH   Remote ref to compare against (default: HEAD)
@@ -88,32 +86,35 @@ for path in "${submodule_paths[@]}"; do
     continue
   fi
 
-  # 5. Stale — auto-update if this is the designated submodule, otherwise warn
+  # 5. Stale — write remote_sha directly into the parent index via
+  #    git update-index --cacheinfo. This avoids the stash conflict that
+  #    occurs when using `git submodule update` inside a pre-commit hook
+  #    (pre-commit stashes unstaged files before running hooks, which hides
+  #    the submodule working tree). Exit 1 so pre-commit surfaces the staged
+  #    change and asks the developer to re-commit.
   if [[ "$path" == "$AUTO_UPDATE" ]]; then
-    echo "pull-submodules: '$path' is behind remote — auto-updating and staging." >&2
-    if git submodule update --remote "$path" 2>/dev/null; then
-      git add "$path"
-      echo "pull-submodules: '$path' updated to $(git submodule status "$path" | awk '{print $1}' | tr -d '+-U') and staged." >&2
+    if git update-index --cacheinfo "160000,${remote_sha},${path}"; then
+      echo "pull-submodules: '$path' was out of date — updated to $remote_sha and staged."
+      echo "pull-submodules: re-run your commit to include the updated submodule pointer."
+      warned=1
     else
-      echo "pull-submodules: WARNING — auto-update of '$path' failed; please update manually." >&2
+      echo "pull-submodules: WARNING — could not stage updated pointer for '$path'; please update manually."
       warned=1
     fi
   else
-    echo "" >&2
-    echo "WARNING: submodule '$path' is behind the remote." >&2
-    echo "  Pinned : $pinned" >&2
-    echo "  Remote : $remote_sha" >&2
-    echo "  To update: git submodule update --remote $path" >&2
-    echo "" >&2
+    echo ""
+    echo "WARNING: submodule '$path' is behind the remote."
+    echo "  Pinned : $pinned"
+    echo "  Remote : $remote_sha"
+    echo "  To update: git submodule update --remote $path"
+    echo ""
     warned=1
   fi
 
 done
 
-# Summary line if any non-auto submodule was stale
 if [[ $warned -eq 1 ]]; then
-  echo "pull-submodules: one or more submodules are out of date." \
-       "Run 'git submodule update --remote' to update all." >&2
+  exit 1
 fi
 
 exit 0
